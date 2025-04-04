@@ -7,6 +7,11 @@ class NodeType(Enum):
     # top-level
     PROGRAM = "Program"
 
+    # 添加 NULL 类型
+    NULL = "Null"
+    BOOLEAN = "Boolean"
+    
+    
     # expressions
     ASSIGNMENT_EXPR = "AssignmentExpression"
     BINARY_EXPR = "BinaryExpression"
@@ -61,6 +66,7 @@ class NodeType(Enum):
     YIELD_STMT = "YieldStatement"
     GOTO_STMT = "GotoStatement"
     WITH_STMT = "WithStatement"
+    PASS_STMT = "PassStatement"
 
     # declarations & definitions (are also statements)
     FUNCTION_DECLARATOR = "FunctionDeclarator"
@@ -114,6 +120,10 @@ class NodeType(Enum):
     KEYVALUE_PAIR = "KeyValuePair"
     OBJECT_MEMBERS = "ObjectMembers"
     COMPUTED_PROPERTY_NAME = "ComputedPropertyName"
+    
+    # 在NodeType类中添加
+    COMPREHENSION_EXPR = "COMPREHENSION_EXPR"
+    COMPREHENSION_CLAUSE = "COMPREHENSION_CLAUSE"
 
 
 class Node:

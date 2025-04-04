@@ -7,12 +7,16 @@ class Expression(Node):
 
 
 def is_expression(node: Node):
+    if node is None:
+        return False
     return (
         isinstance(node, Expression) or node.node_type == NodeType.FUNCTION_DEFINITION
     )
 
 
 def is_primary_expression(node: Node):
+    if node is None:
+        return False
     nt = node.node_type
     return nt in {
         NodeType.LITERAL,

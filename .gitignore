@@ -30,3 +30,6 @@ wandb/
 
 # csn datasets
 datasets/csn_*/*.jsonl
+datasets/
+logs/
+

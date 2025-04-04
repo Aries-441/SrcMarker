@@ -33,6 +33,15 @@ class BinaryOps(Enum):
     NULL_COALESCING = "??"
     INSTANCEOF = "instanceof"  # javascript
     IN = "in"
+    KEY_VALUE = ":"
+    IF = "if"
+    ELSE = "else"
+    IS = "is"
+    EQD = "="
+    ISNOT = "is not"
+    NOTIN = "not in"
+    PYNOT = "not"
+    PYMOD = "mod"
 
 
 _binary_op_map = {
@@ -63,6 +72,15 @@ _binary_op_map = {
     "??": BinaryOps.NULL_COALESCING,
     "instanceof": BinaryOps.INSTANCEOF,
     "in": BinaryOps.IN,
+    ":": BinaryOps.KEY_VALUE,
+    "if": BinaryOps.IF,
+    "else": BinaryOps.ELSE,
+    "is": BinaryOps.IS,
+    "=": BinaryOps.EQD,
+    "isnot": BinaryOps.ISNOT,
+    "notin": BinaryOps.NOTIN,
+    "not":BinaryOps.PYNOT,
+    "mod":BinaryOps.PYMOD,
 }
 
 
@@ -84,6 +102,7 @@ class BinaryExpression(Expression):
         if self.node_type != NodeType.BINARY_EXPR:
             raise TypeError(f"Invalid type: {self.node_type} for BinaryExpression")
         if not is_expression(self.left):
+            print(self.left, self.op, self.right)
             raise TypeError(f"Invalid type: {self.left.node_type} for BinOp LHS")
         if not is_expression(self.right):
             raise TypeError(f"Invalid type: {self.right.node_type} for BinOp RHS")

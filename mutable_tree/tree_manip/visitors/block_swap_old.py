@@ -56,22 +56,13 @@ class NormalBlockSwapper(BlockSwapper):
 
         if isinstance(expr, BinaryExpression):
             op = expr.op
-            if op in {BinaryOps.GE, BinaryOps.GT, BinaryOps.NE,
-                      BinaryOps.NOTIN, BinaryOps.ISNOT,}:
+            if op in {BinaryOps.GE, BinaryOps.GT, BinaryOps.NE}:
                 return True
 
         elif isinstance(expr, UnaryExpression):
             op = expr.op
-            if op in [UnaryOps.NOT, UnaryOps.PYNOT]:
+            if op == UnaryOps.NOT:
                 return True
-            
-        # Python 特有：处理 if x 这种直接判断真值的情况
-        elif expr.node_type in {
-            NodeType.CALL_EXPR,
-            NodeType.IDENTIFIER,
-            NodeType.LITERAL
-        }:
-            return True
 
         return False
 
@@ -86,18 +77,12 @@ class NormalBlockSwapper(BlockSwapper):
                 BinaryOps.GE: BinaryOps.LT,
                 BinaryOps.GT: BinaryOps.LE,
                 BinaryOps.NE: BinaryOps.EQ,
-                BinaryOps.ISNOT: BinaryOps.IS,
-                BinaryOps.NOTIN: BinaryOps.IN,
             }[op]
             return node_factory.create_binary_expr(expr.left, expr.right, new_op)
 
         elif isinstance(expr, UnaryExpression):
-            assert expr.op in [UnaryOps.NOT, UnaryOps.PYNOT]
+            assert expr.op == UnaryOps.NOT
             return expr.operand
-        
-        # Python 特有：处理直接真值判断的情况
-        elif expr.node_type in {NodeType.CALL_EXPR, NodeType.IDENTIFIER, NodeType.LITERAL}:
-            return node_factory.create_unary_expr(expr, UnaryOps.PYNOT)
 
         else:
             raise RuntimeError(f"cannot transform expression {expr}")
@@ -111,15 +96,14 @@ class NegatedBlockSwapper(BlockSwapper):
 
         if isinstance(expr, BinaryExpression):
             op = expr.op
-            if op in {BinaryOps.LE, BinaryOps.LT, BinaryOps.EQ,
-                      BinaryOps.IS, BinaryOps.IN}:
+            if op in {BinaryOps.LE, BinaryOps.LT, BinaryOps.EQ}:
                 return True
             else:
                 return False
 
         elif isinstance(expr, UnaryExpression):
             op = expr.op
-            if op in [UnaryOps.NOT, UnaryOps.PYNOT]:
+            if op == UnaryOps.NOT:
                 # dont negate twice
                 return False
 
@@ -138,8 +122,6 @@ class NegatedBlockSwapper(BlockSwapper):
                 BinaryOps.LE: BinaryOps.GT,
                 BinaryOps.LT: BinaryOps.GE,
                 BinaryOps.EQ: BinaryOps.NE,
-                BinaryOps.IS: BinaryOps.ISNOT,
-                BinaryOps.IN: BinaryOps.NOTIN,
             }[op]
             return node_factory.create_binary_expr(expr.left, expr.right, new_op)
 

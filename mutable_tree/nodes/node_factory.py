@@ -413,6 +413,7 @@ def create_do_stmt(condition: Expression, body: Statement) -> DoStatement:
     return DoStatement(NodeType.DO_STMT, body, condition)
 
 
+#FIXME: ForInStatement需要对Python进行修正，目前适配js
 def create_for_in_stmt(
     decl_type: DeclaratorType,
     decl: Union[Declarator, Expression],
@@ -662,8 +663,8 @@ def create_modifier_list(modifiers: List[Modifier]) -> ModifierList:
     return ModifierList(NodeType.MODIFIER_LIST, modifiers)
 
 
-def create_spread_element(expr: Expression) -> SpreadElement:
-    return SpreadElement(NodeType.SPREAD_ELEMENT, expr)
+def create_spread_element(expr: Expression, is_dict: bool) -> SpreadElement:
+    return SpreadElement(NodeType.SPREAD_ELEMENT, expr, is_dict)
 
 
 def create_await_expr(expr: Expression) -> AwaitExpression:

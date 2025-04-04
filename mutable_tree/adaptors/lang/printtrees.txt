@@ -1,0 +1,79 @@
+def stringify_ExpressionList(self, node) -> str:
+    """
+    将ExpressionList对象转换为字符串
+    """ 
+    result = []
+    for expr in node.expressions:
+        if expr is not None:
+            expr_str = self.stringify(expr)
+            if expr_str:
+                result.append(expr_str)
+    
+    return ", ".join(result)
+    
+    
+def stringify_ArrayExpression(self, node: ArrayExpression) -> str:
+    """
+    将ArrayExpression对象转换为字符串
+    """
+    if not node.elements:
+        return "[]"  # 空数组
+    
+    # 检查是否是字典字面量
+    is_dict = False
+    if hasattr(node.elements, 'expressions') and node.elements.expressions:
+        for expr in node.elements.expressions:
+            if isinstance(expr, BinaryExpression) and hasattr(expr, 'op') and expr.op == ':':
+                is_dict = True
+                break
+    
+    elements_str = self.stringify(node.elements) if node.elements else ""
+    
+    if is_dict:
+        return f"{{{elements_str}}}"
+    else:
+        return f"[{elements_str}]"
+
+def stringify_ArrayAccess(self, node: ArrayAccess) -> str:
+    """
+    将ArrayAccess对象转换为字符串
+    """
+    array_str = self.stringify(node.array) if node.array else ""
+    index_str = self.stringify(node.index) if node.index else ""
+    
+    # 处理字符串形式的数字索引
+    if index_str.startswith("'") and index_str.endswith("'"):
+        try:
+            # 尝试将字符串转换为数字
+            int(index_str[1:-1])
+            index_str = index_str[1:-1]
+        except ValueError:
+            pass
+    
+    return f"{array_str}[{index_str}]"
+
+def stringify_Literal(self, node: Literal) -> str:
+    """
+    将Literal对象转换为字符串
+    """
+    if node.value is None:
+        return "None"
+    
+    value = node.value
+    
+    # 处理字符串字面量
+    if isinstance(value, str):
+        # 检查是否已经带有引号
+        if (value.startswith("'") and value.endswith("'")) or (value.startswith('"') and value.endswith('"')):
+            return value
+        
+        # 检查是否是Python关键字或特殊值
+        if value in ["True", "False", "None"]:
+            return value
+        
+        # 为普通字符串添加引号
+        return f"'{value}'"
+    
+    # 处理数字和其他字面量
+    return str(value)
+    

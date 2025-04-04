@@ -1,3 +1,12 @@
+'''
+FileName: 
+Description: 
+Autor: Liujunjie/Aries-441
+Github: https://github.com/Aries-441
+Date: 2025-03-19 19:00:14
+E-mail: sjtu.liu.jj@gmail.com/sjtu.1518228705@sjtu.edu.cn
+LastEditTime: 2025-04-04 15:56:29
+'''
 from enum import Enum
 from typing import List
 
@@ -14,6 +23,7 @@ class UnaryOps(Enum):
     VOID = "void"
     TYPEOF = "typeof"
     DELETE = "delete"  # js
+    PYNOT = "not"  # python
 
 
 _unary_op_map = {
@@ -24,6 +34,7 @@ _unary_op_map = {
     "void": UnaryOps.VOID,
     "typeof": UnaryOps.TYPEOF,
     "delete": UnaryOps.DELETE,
+    "not": UnaryOps.PYNOT,
 }
 
 

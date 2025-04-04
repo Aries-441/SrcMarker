@@ -1,4 +1,8 @@
 from .statement import Statement, is_statement
+from .class_declaration import ClassDeclaration
+from .pass_stmt import PassStatement
+from .raise_stmt import RaiseStatement
+from .variable_declaration import VariableDeclaration
 from .assert_stmt import AssertStatement
 from .block_stmt import BlockStatement
 from .break_stmt import BreakStatement

@@ -6,9 +6,10 @@ from typing import List
 
 
 class SpreadElement(Expression):
-    def __init__(self, node_type: NodeType, expr: Expression):
+    def __init__(self, node_type: NodeType, expr: Expression, is_dict: bool):
         super().__init__(node_type)
         self.expr = expr
+        self.is_dict = is_dict
         self._check_types()
 
     def _check_types(self):

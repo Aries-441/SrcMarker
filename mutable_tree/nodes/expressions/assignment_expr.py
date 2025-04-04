@@ -70,11 +70,13 @@ class AssignmentExpression(Expression):
             NodeType.CALL_EXPR,
             NodeType.POINTER_EXPR,
             NodeType.PARENTHESIZED_EXPR,
+            NodeType.EXPRESSION_LIST,
+            NodeType.ARRAY_EXPR,
         }:
             raise TypeError(f"Invalid type: {lt} for Assignment LHS")
         if (
             not is_expression(self.right)
-            and self.right.node_type != NodeType.FUNCTION_DEFINITION
+            and self.right.node_type not in {NodeType.FUNCTION_DEFINITION,NodeType.EXPRESSION_LIST,}
         ):
             raise TypeError(f"Invalid type: {self.right.node_type} for Assignment RHS")
 

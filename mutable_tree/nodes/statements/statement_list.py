@@ -20,3 +20,11 @@ class StatementList(NodeList):
         for i, stmt in enumerate(self.node_list):
             if not is_statement(stmt):
                 throw_invalid_type(stmt.node_type, self, f"stmt#{i}")
+                
+    def get_children(self) -> List[Statement]:
+        """返回语句列表中的所有语句"""
+        return self.node_list
+    
+    def get_children_names(self) -> List[int]:
+        """返回语句列表中所有语句的索引"""
+        return list(range(len(self.node_list)))
