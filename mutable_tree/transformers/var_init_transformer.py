@@ -8,8 +8,9 @@ class VarInitTransformer(CodeTransformer):
     TRANSFORM_INIT_SPLIT = "VarInitTransformer.split"
     TRANSFORM_INIT_MERGE = "VarInitTransformer.merge"
 
-    def __init__(self) -> None:
+    def __init__(self, lang: str = "c") -> None:
         super().__init__()
+        self.lang = lang
 
     def get_available_transforms(self):
         return [

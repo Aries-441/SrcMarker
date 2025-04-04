@@ -15,8 +15,9 @@ class VarNameStyleTransformer(CodeTransformer):
     TRANSFORM_SNAKE_CASE = "VarNameStyleTransformer.snake_case"
     TRANSFORM_UNDERSCORE_CASE = "VarNameStyleTransformer.underscore_case"
 
-    def __init__(self) -> None:
+    def __init__(self, lang: str = "c") -> None:
         super().__init__()
+        self.lang = lang
 
     def get_available_transforms(self):
         return [

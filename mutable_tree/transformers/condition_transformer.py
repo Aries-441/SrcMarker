@@ -8,8 +8,9 @@ class ConditionTransformer(CodeTransformer):
     TRANSFORM_COND_SWITCH = "ConditionTransformer.switch"
     TRANSFORM_COND_TERNARY = "ConditionTransformer.ternary"
 
-    def __init__(self) -> None:
+    def __init__(self, lang: str = "c") -> None:
         super().__init__()
+        self.lang = lang
 
     def get_available_transforms(self):
         return [self.TRANSFORM_COND_SWITCH, self.TRANSFORM_COND_TERNARY]

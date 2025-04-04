@@ -14,7 +14,7 @@ class LoopLiteralOneVisitor(TransformingVisitor):
     ):
         self.generic_visit(node, parent, parent_attr)
         condition = node.condition
-        if isinstance(condition, Literal) and condition.value in ["true", "True"]:
+        if isinstance(condition, Literal) and condition.value == "true":
             node.condition = node_factory.create_literal("1")
             return (True, [node])
 
@@ -29,7 +29,7 @@ class LoopLiteralOneVisitor(TransformingVisitor):
         self.generic_visit(node, parent, parent_attr)
         condition = node.condition
         if (
-            isinstance(condition, Literal) and condition.value in ["true", "True"]
+            isinstance(condition, Literal) and condition.value == "true"
         ) or condition is None:
             node.condition = node_factory.create_literal("1")
             return (True, [node])

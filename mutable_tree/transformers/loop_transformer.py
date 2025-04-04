@@ -8,8 +8,9 @@ class LoopTransformer(CodeTransformer):
     TRANSFORM_LOOP_FOR = "LoopTransformer.for_loop"
     TRANSFORM_LOOP_WHILE = "LoopTransformer.while_loop"
 
-    def __init__(self) -> None:
+    def __init__(self, lang: str = "c") -> None:
         super().__init__()
+        self.lang = lang
 
     def get_available_transforms(self):
         return [self.TRANSFORM_LOOP_FOR, self.TRANSFORM_LOOP_WHILE]

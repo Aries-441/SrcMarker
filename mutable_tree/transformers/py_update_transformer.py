@@ -1,8 +1,15 @@
+'''
+FileName: 
+Description: 
+Autor: Liujunjie/Aries-441
+Github: https://github.com/Aries-441
+Date: 2025-04-04 17:52:02
+E-mail: sjtu.liu.jj@gmail.com/sjtu.1518228705@sjtu.edu.cn
+LastEditTime: 2025-04-04 17:56:11
+'''
 from mutable_tree.nodes import Node
 from .code_transformer import CodeTransformer
-from ..tree_manip.visitors import (
-    PrefixUpdateVisitor,
-    PostfixUpdateVisitor,
+from ..tree_manip.visitors import (  
     BinopUpdateVisitor,
     AssignUpdateVisitor,
 )
@@ -10,8 +17,6 @@ from ..tree_manip.visitors import (
 
 class UpdateTransformer(CodeTransformer):
     name = "UpdateTransformer"
-    TRANSFORM_PREFIX_UPDATE = "UpdateTransformer.prefix_update"
-    TRANSFORM_POSTFIX_UPDATE = "UpdateTransformer.postfix_update"
     TRANSFORM_BINOP_UPDATE = "UpdateTransformer.binop_update"
     TRANSFORM_ASSIGN_UPDATE = "UpdateTransformer.assign_update"
 
@@ -21,16 +26,12 @@ class UpdateTransformer(CodeTransformer):
 
     def get_available_transforms(self):
         return [
-            self.TRANSFORM_PREFIX_UPDATE,
-            self.TRANSFORM_POSTFIX_UPDATE,
             self.TRANSFORM_BINOP_UPDATE,
             self.TRANSFORM_ASSIGN_UPDATE,
         ]
 
     def mutable_tree_transform(self, node: Node, dst_style: str):
         return {
-            self.TRANSFORM_PREFIX_UPDATE: PrefixUpdateVisitor(),
-            self.TRANSFORM_POSTFIX_UPDATE: PostfixUpdateVisitor(),
             self.TRANSFORM_BINOP_UPDATE: BinopUpdateVisitor(),
             self.TRANSFORM_ASSIGN_UPDATE: AssignUpdateVisitor(),
         }[dst_style].visit(node)

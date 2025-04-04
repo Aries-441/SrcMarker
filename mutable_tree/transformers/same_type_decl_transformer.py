@@ -11,8 +11,9 @@ class SameTypeDeclarationTransformer(CodeTransformer):
     TRANSFORM_SAME_TYPE_SPLIT = "SameTypeDeclarationTransformer.split"
     TRANSFORM_SAME_TYPE_MERGE = "SameTypeDeclarationTransformer.merge"
 
-    def __init__(self) -> None:
+    def __init__(self, lang: str = "c") -> None:
         super().__init__()
+        self.lang = lang
 
     def get_available_transforms(self):
         return [self.TRANSFORM_SAME_TYPE_SPLIT, self.TRANSFORM_SAME_TYPE_MERGE]

@@ -8,8 +8,9 @@ class IfBlockSwapTransformer(CodeTransformer):
     TRANSFORM_IF_BLOCK_NORMAL = "IfBlockSwapTransformer.normal"
     TRANSFORM_IF_BLOCK_NEGATED = "IfBlockSwapTransformer.negated"
 
-    def __init__(self) -> None:
+    def __init__(self, lang: str = "c") -> None:
         super().__init__()
+        self.lang = lang
 
     def get_available_transforms(self):
         return [self.TRANSFORM_IF_BLOCK_NORMAL, self.TRANSFORM_IF_BLOCK_NEGATED]

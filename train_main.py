@@ -1,3 +1,12 @@
+'''
+FileName: 
+Description: 
+Autor: Liujunjie/Aries-441
+Github: https://github.com/Aries-441
+Date: 2025-03-19 19:00:14
+E-mail: sjtu.liu.jj@gmail.com/sjtu.1518228705@sjtu.edu.cn
+LastEditTime: 2025-04-04 19:01:02
+'''
 import torch
 import random
 import tree_sitter
@@ -105,16 +114,16 @@ def main():
     parser_lang = tree_sitter.Language("./parser/languages.so", LANG)
     parser.set_language(parser_lang)
     code_transformers = [
-        ast_transformers.IfBlockSwapTransformer(),
-        ast_transformers.CompoundIfTransformer(),
-        ast_transformers.ConditionTransformer(),
-        ast_transformers.LoopTransformer(),
-        ast_transformers.InfiniteLoopTransformer(),
-        ast_transformers.UpdateTransformer(),
-        ast_transformers.SameTypeDeclarationTransformer(),
-        ast_transformers.VarDeclLocationTransformer(),
-        ast_transformers.VarInitTransformer(),
-        ast_transformers.VarNameStyleTransformer(),
+        ast_transformers.IfBlockSwapTransformer(LANG), #已修改
+        ast_transformers.CompoundIfTransformer(LANG), #目前看来不需要修改
+        ast_transformers.ConditionTransformer(LANG), #NOTE:目前看来需要大改，因为Python没有switch语句
+        ast_transformers.LoopTransformer(LANG), #NOTE:目前看来需要大改，因为Python for循环的语法和C++不一样
+        ast_transformers.InfiniteLoopTransformer(LANG), #已修改
+        ast_transformers.UpdateTransformer(LANG), #已修改，但是舍弃了2 Option
+        ast_transformers.SameTypeDeclarationTransformer(LANG), #目前看来不需要修改
+        ast_transformers.VarDeclLocationTransformer(LANG), #NOTE:目前看来需要大改，因为Python没有var声明的语法
+        ast_transformers.VarInitTransformer(LANG),
+        ast_transformers.VarNameStyleTransformer(LANG), #虽然不符合PEP 8命名规范，但是不影响运行结果
     ]
     transform_computer = CodeTransformProvider(LANG, parser, code_transformers)
     transform_manager = InMemoryJitRuntimeDataManager(

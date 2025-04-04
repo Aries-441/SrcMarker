@@ -11,8 +11,9 @@ class VarDeclLocationTransformer(CodeTransformer):
     TRANSFORM_VARDECL_BLOCK_START = "VarDeclLocationTransformer.block_start"
     TRANSFORM_VARDECL_FIRST_USE = "VarDeclLocationTransformer.first_use"
 
-    def __init__(self) -> None:
+    def __init__(self, lang: str = "c") -> None:
         super().__init__()
+        self.lang = lang
 
     def get_available_transforms(self):
         return [

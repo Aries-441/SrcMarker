@@ -410,6 +410,9 @@ class PythonStringifier(BaseStringifier):
             elif value in ('True', 'False', 'None'):
                 # 布尔值和None，不需要引号
                 return value
+            elif value == "true":
+                # 特殊处理：将"true"转换为True
+                return "True"
             else:
                 # 字符串，添加单引号
                 return f"'{value}'"
