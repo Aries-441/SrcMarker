@@ -1,7 +1,7 @@
 from .expression import Expression, is_expression, is_primary_expression
 from .array_access import ArrayAccess
 from .array_creation_expr import ArrayCreationExpression
-from .array_expr import ArrayExpression
+from .array_expr import ArrayExpression, ArrayPatternType
 from .assignment_expr import AssignmentExpression, get_assignment_op, AssignmentOps
 from .binary_expr import BinaryExpression, get_binary_op, BinaryOps
 from .call_expr import CallExpression

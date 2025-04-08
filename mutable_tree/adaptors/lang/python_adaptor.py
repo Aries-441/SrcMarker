@@ -5,18 +5,20 @@ Autor: Liujunjie/Aries-441
 Github: https://github.com/Aries-441
 Date: 2025-03-19 19:33:36
 E-mail: sjtu.liu.jj@gmail.com/sjtu.1518228705@sjtu.edu.cn
-LastEditTime: 2025-03-30 17:27:39
+LastEditTime: 2025-04-07 14:31:37
 '''
 # https://github.com/tree-sitter/tree-sitter-python/blob/master/grammar.js
 import tree_sitter
 
 from mutable_tree.nodes.expressions.binary_expr import BinaryOps
+from mutable_tree.nodes.expressions.field_access import FieldAccessOps
 from mutable_tree.nodes.expressions.list_comprehension_expr import ComprehensionClause, ComprehensionExpression
 from ...nodes import Expression, Statement, node_factory
 from ...nodes.statements.statement_list import StatementList
 from ...nodes import (
     ArrayAccess,
     ArrayExpression,
+    ArrayPatternType,
     AssignmentExpression,
     BinaryExpression,
     CallExpression,
@@ -26,7 +28,8 @@ from ...nodes import (
     UnaryExpression,
     ParenthesizedExpression,
     ExpressionList,
-    FormalParameter
+    FormalParameter,
+    LambdaExpression,
 )
 from ...nodes import (
     BlockStatement,
@@ -86,17 +89,6 @@ def record_unhandled_type(type_name, category, instance_id=None):
             unhandled_instances[key] = set()
         unhandled_instances[key].add(instance_id)
 
-# 定义字面量类型常量
-class LiteralTypes:
-    STRING = "string"
-    NUMBER = "number"
-    NULL = "null"
-    BOOLEAN = "boolean"
-
-# 定义布尔运算符常量
-class BooleanOps:
-    AND = "and"
-    OR = "or"
     
 class ForInType:
     COLON = ":"
@@ -169,7 +161,12 @@ def convert_expression(node: tree_sitter.Node) -> Expression:
         "list_splat_pattern": convert_list_splat_parameter,
         "dictionary_splat_pattern": convert_dict_splat_parameter,
         "pattern_list": convert_pattern_list,
-
+        "expression_list": convert_pattern_list,
+        
+        "lambda": convert_lambda,
+        "as_pattern": convert_as_pattern,
+        "as_pattern_target": convert_as_pattern_target,
+        "concatenated_string": convert_concatenated_string,
     }
     
     if node.type in expr_convertors:
@@ -444,8 +441,8 @@ def convert_return_statement(node: tree_sitter.Node) -> Statement:
         
         # 创建一个数组表达式来表示元组
         expressions = ExpressionList(NodeType.EXPRESSION_LIST, expressions)
-        tuple_expr = node_factory.create_array_expr(expressions)
-        return node_factory.create_return_stmt(tuple_expr)
+        pattern_expr = node_factory.create_array_expr(expressions, ArrayPatternType.PATTERN)
+        return node_factory.create_return_stmt(pattern_expr)
     else:
         # 单值返回
         expr = convert_expression(expr_node)
@@ -600,41 +597,128 @@ def convert_pass_statement(node: tree_sitter.Node) -> PassStatement:
 def convert_raise_statement(node: tree_sitter.Node) -> RaiseStatement:
     """
     将Python raise语句转换为内部表示的RaiseStatement
+    
+    处理以下形式的raise语句:
+    1. raise - 不带参数的重新抛出异常
+    2. raise Exception - 抛出指定异常
+    3. raise Exception("message") - 带消息的异常
+    4. raise Exception from cause - 带原因的异常
     """
     expression = None
     cause = None
     
-    for child in node.children:
-        if child.type == "expression":
+    # 遍历子节点查找表达式和cause
+    for i, child in enumerate(node.children):
+        if child.type == "identifier" or child.type == "call":
+            # 第一个表达式是异常对象
             if expression is None:
                 expression = convert_expression(child)
-            else:
-                # 如果已经有expression，那么这个是cause (from 子句)
+        elif child.type == "expression":
+            # 第一个表达式是异常对象
+            if expression is None:
+                expression = convert_expression(child)
+            # 第二个表达式是cause (from子句)
+            elif cause is None:
                 cause = convert_expression(child)
+        # 检查是否有from关键字，确保下一个表达式是cause
+        elif child.type == "from" and i + 1 < len(node.children):
+            next_child = node.children[i + 1]
+            if next_child.type in ["identifier", "call", "expression"]:
+                cause = convert_expression(next_child)
     
     return RaiseStatement(NodeType.RAISE_STMT, expression, cause)
 
 def convert_with_statement(node: tree_sitter.Node) -> WithStatement:
     """
-    将Python with语句转换为内部表示的WithStatement
+    将Python的with语句转换为内部表示的WithStatement
+    
+    支持以下形式:
+    1. 单个资源: with open('file.txt') as f:
+    2. 多个资源: with open('file1.txt') as f1, open('file2.txt') as f2:
+    3. 不带as的资源: with lock:
     """
-    object_node = None
-    body_node = node.child_by_field_name("body")
+    # 获取with_clause节点
+    with_clause = None
+    body_node = None
+    is_async = False
     
-    # 查找with项
+    # 遍历子节点查找with_clause和body
     for child in node.children:
-        if child.type == "with_item":
-            object_node = child.child_by_field_name("value")
-            break
+        if child.type == "with_clause":
+            with_clause = child
+        elif child.type == "block":
+            body_node = child
+        elif child.type == "async":
+            is_async = True
     
-    object_expr = convert_expression(object_node) if object_node else None
+    # 处理body
     body = convert_statement(body_node) if body_node else None
     
-    return WithStatement(NodeType.WITH_STMT, object_expr, body)
-
-
-
-#NOTE需要再检查
+    # 处理资源
+    resources = []
+    if with_clause:
+        # 遍历with_clause的子节点，查找with_item
+        for child in with_clause.children:
+            if child.type == "with_item":
+                # 获取资源表达式
+                value_node = child.child_by_field_name("value")
+                alias_node = child.child_by_field_name("alias")
+                
+                # 如果没有通过field_name找到，尝试通过子节点类型查找
+                if not value_node:
+                    for item_child in child.children:
+                        if item_child.type in ["call", "identifier", "attribute", "expression"]:
+                            value_node = item_child
+                            break
+                
+                # 处理as_pattern
+                if not alias_node and not value_node:
+                    for item_child in child.children:
+                        if item_child.type == "as_pattern":
+                            # 从as_pattern中获取value和alias
+                            as_children = item_child.children
+                            if len(as_children) >= 3:  # 至少需要value, as, alias
+                                value_node = as_children[0]
+                                alias_node = as_children[2]
+                
+                # 转换资源表达式
+                if value_node:
+                    resource = convert_expression(value_node)
+                    
+                    # 如果有别名，创建带as关系的表达式
+                    if alias_node:
+                        alias = convert_expression(alias_node)
+                        if alias and resource:
+                            # 使用自定义的FieldAccess来表示"as"关系
+                            # 直接创建FieldAccess对象，不使用node_factory
+                            resource = FieldAccess(
+                                NodeType.FIELD_ACCESS,
+                                resource,
+                                alias,
+                                FieldAccessOps.AS,
+                                False,
+                                True  # is_as_pattern=True
+                            )
+                    
+                    if resource:
+                        resources.append(resource)
+    
+    # 如果有多个资源，创建数组表达式
+    if len(resources) > 1:
+        expr_list = ExpressionList(NodeType.EXPRESSION_LIST, resources)
+        resource_array = ArrayExpression(NodeType.ARRAY_EXPR, expr_list)
+        with_stmt = WithStatement(NodeType.WITH_STMT, resource_array, body)
+    elif len(resources) == 1:
+        # 单个资源
+        with_stmt = WithStatement(NodeType.WITH_STMT, resources[0], body)
+    else:
+        # 没有资源，创建一个空的标识符作为占位符
+        empty_resource = Identifier(NodeType.IDENTIFIER, "_empty_resource")
+        with_stmt = WithStatement(NodeType.WITH_STMT, empty_resource, body)
+    
+    # 设置异步标志
+    with_stmt.is_async = is_async
+    return with_stmt
 def convert_try_statement(node: tree_sitter.Node) -> TryStatement:
     """
     将Python try语句转换为内部表示的TryStatement
@@ -654,15 +738,30 @@ def convert_try_statement(node: tree_sitter.Node) -> TryStatement:
             
             # 处理异常类型
             for except_child in child.children:
-                if except_child.type == "identifier" and exception_type is None:
+                if except_child.type == "type" or except_child.type == "expression":
+                    # 直接处理异常类型表达式
+                    exception_type = convert_expression(except_child)
+                elif except_child.type == "identifier" and exception_type is None:
+                    # 处理简单标识符作为异常类型
                     exception_type = convert_expression(except_child)
                 elif except_child.type == "as_pattern":
-                    # 处理 as 模式
+                    # 处理 as 模式 (例如 except Exception as e:)
+                    as_type = None
+                    as_name = None
+                    
                     for as_child in except_child.children:
-                        if as_child.type == "identifier" and exception_type is None:
-                            exception_type = convert_expression(as_child)
+                        if as_child.type == "expression" and as_type is None:
+                            as_type = convert_expression(as_child)
+                        elif as_child.type == "identifier" and as_type is None:
+                            as_type = convert_expression(as_child)
                         elif as_child.type == "as_pattern_target":
-                            exception_var = convert_expression(as_child.child(0))
+                            as_name = convert_expression(as_child.child(0))
+                    
+                    # 设置异常类型和变量
+                    if as_type:
+                        exception_type = as_type
+                    if as_name:
+                        exception_var = as_name
                 elif except_child.type == "block":
                     except_body = convert_statement(except_child)
             
@@ -687,10 +786,14 @@ def convert_try_statement(node: tree_sitter.Node) -> TryStatement:
                     else_block = convert_statement(else_child)
                     break
     
-    # 创建TryHandlers对象，包含catch_clauses和finally_block
-    handlers = node_factory.create_try_handlers(catch_clauses, finally_block)
+    # 创建TryHandlers对象，包含catch_clauses
+    handlers = node_factory.create_try_handlers(catch_clauses)
     
-    # 创建并返回TryStatement，包含else_block
+    # 如果有finally块，将其添加到handlers中
+    if finally_block:
+        handlers.finally_block = finally_block
+    
+    # 创建并返回TryStatement，包含body、handlers和else_block
     return node_factory.create_try_stmt(body, handlers, else_block)
 
 def convert_identifier(node: tree_sitter.Node) -> Identifier:
@@ -706,27 +809,68 @@ def convert_literal(node: tree_sitter.Node) -> Literal:
     if node.type == "string":
         # 处理字符串字面量
         content = ""
+        # 获取原始字符串文本，包括引号
+        raw_text = node.text.decode('utf-8')
+        
+        # 检查字符串的引号类型
+        quote_type = None
+        if raw_text.startswith("'") and raw_text.endswith("'"):
+            quote_type = "single"
+        elif raw_text.startswith('"') and raw_text.endswith('"'):
+            quote_type = "double"
+        elif raw_text.startswith("'''") and raw_text.endswith("'''"):
+            quote_type = "triple_single"
+        elif raw_text.startswith('"""') and raw_text.endswith('"""'):
+            quote_type = "triple_double"
+        
+        # 获取字符串内容
         for child in node.children:
             if child.type == "string_content":
                 content = child.text.decode('utf-8')
                 break
-        # 返回带引号的字符串
-        return node_factory.create_literal(content)
+        
+        # 创建带有引号类型信息的字面量
+        literal = node_factory.create_literal(content)
+        literal.is_string = True
+        literal.quote_type = quote_type
+        literal.raw_text = raw_text  # 保存原始文本，包括引号
+        return literal
+    
     elif node.type in ["integer", "float"]:
         # 处理数字字面量
         value = node.text.decode()
-        return node_factory.create_literal(value)
+        literal = node_factory.create_literal(value)
+        literal.is_string = False
+        return literal
+    
     elif node.type == "true":
-        return node_factory.create_literal("True")
+        literal = node_factory.create_literal("True")
+        literal.is_string = False
+        return literal
+    
     elif node.type == "false":
-        return node_factory.create_literal("False")
+        literal = node_factory.create_literal("False")
+        literal.is_string = False
+        return literal
+    
     elif node.type == "none":
-        return node_factory.create_literal("None")
+        literal = node_factory.create_literal("None")
+        literal.is_string = False
+        return literal
+    
     else:
         # 其他类型的字面量
         value = node.text.decode('utf-8')
-        return node_factory.create_literal(value)
-
+        # 检查是否是字符串形式的数字
+        is_string = False
+        if value.startswith("'") and value.endswith("'"):
+            is_string = True
+        elif value.startswith('"') and value.endswith('"'):
+            is_string = True
+        
+        literal = node_factory.create_literal(value)
+        literal.is_string = is_string
+        return literal
 
 def convert_binary_operator(node: tree_sitter.Node) -> BinaryExpression:
     """
@@ -897,7 +1041,7 @@ def convert_list(node: tree_sitter.Node) -> ArrayExpression:
     
     # 修复：添加NodeType.ARRAY_EXPR作为第一个参数
     expr_list = ExpressionList(NodeType.EXPRESSION_LIST, elements)
-    return ArrayExpression(NodeType.ARRAY_EXPR, expr_list)
+    return ArrayExpression(NodeType.ARRAY_EXPR, expr_list, ArrayPatternType.LIST)
 
 
 def convert_list_comprehension(node: tree_sitter.Node) -> ComprehensionExpression:
@@ -972,7 +1116,7 @@ def convert_tuple(node: tree_sitter.Node) -> ArrayExpression:
     
     # 修复：添加NodeType.ARRAY_EXPR作为第一个参数
     expr_list = ExpressionList(NodeType.EXPRESSION_LIST, elements)
-    return ArrayExpression(NodeType.ARRAY_EXPR, expr_list)
+    return ArrayExpression(NodeType.ARRAY_EXPR, expr_list, ArrayPatternType.TUPLE)
 
 def convert_dictionary(node: tree_sitter.Node) -> Expression:
     """
@@ -993,7 +1137,7 @@ def convert_dictionary(node: tree_sitter.Node) -> Expression:
                 # 将键值对表示为二元表达式
                 elements.append(BinaryExpression(NodeType.BINARY_EXPR, key, value, BinaryOps.KEY_VALUE))
     
-    return ArrayExpression(NodeType.ARRAY_EXPR, ExpressionList(NodeType.EXPRESSION_LIST, elements))
+    return ArrayExpression(NodeType.ARRAY_EXPR, ExpressionList(NodeType.EXPRESSION_LIST, elements), ArrayPatternType.DICT)
 
 
 def convert_set(node: tree_sitter.Node) -> ArrayExpression:
@@ -1008,7 +1152,7 @@ def convert_set(node: tree_sitter.Node) -> ArrayExpression:
                 elements.append(element)
     
     # 使用ArrayExpression表示集合，可以在stringifier中特殊处理
-    return ArrayExpression(ExpressionList(NodeType.EXPRESSION_LIST, elements))
+    return ArrayExpression(NodeType.ARRAY_EXPR, ExpressionList(NodeType.EXPRESSION_LIST, elements), ArrayPatternType.SET)
 
 '''
 def convert_parenthesized_expression(node: tree_sitter.Node) -> ParenthesizedExpression:
@@ -1041,7 +1185,11 @@ def convert_assignment(node: tree_sitter.Node) -> Expression:
         expr = convert_expression(expr_node)
         # 直接返回转换后的表达式
         return expr
-    elif node.child_count == 3:
+    elif node.child_count == 5:
+        #类型注解
+        pass
+    
+    else:
         # 赋值表达式
         left_node = node.child_by_field_name("left")
         right_node = node.child_by_field_name("right")
@@ -1050,12 +1198,10 @@ def convert_assignment(node: tree_sitter.Node) -> Expression:
         right = convert_expression(right_node) if right_node else None
         
         return AssignmentExpression(NodeType.ASSIGNMENT_EXPR, left, right, get_assignment_op("="))
-    elif node.child_count == 5:
-        #类型注解
-        pass
+
     
     # 处理其他情况，返回一个默认值
-    logger.warning(f"无法处理的赋值表达式: {node.type} 子节点数: {node.child_count} 文本内容：{node.text.decode()}")
+    #logger.warning(f"无法处理的赋值表达式: {node.type} 子节点数: {node.child_count} 文本内容：{node.text.decode()}")
     return node_factory.create_literal("None")
 
 
@@ -1252,7 +1398,7 @@ def convert_not_operator(node: tree_sitter.Node) -> Expression:
     argument = convert_expression(argument_node)
     
     # 创建一元表达式，使用NOT作为操作符
-    return node_factory.create_unary_expr(argument, UnaryOps.NOT)
+    return node_factory.create_unary_expr(argument, UnaryOps.PYNOT)
 
 def convert_else_clause(node: tree_sitter.Node) -> Statement:
     """
@@ -1399,4 +1545,168 @@ def convert_pattern_list(node: tree_sitter.Node) -> Expression:
     # 创建一个ExpressionList
     expr_list = ExpressionList(NodeType.EXPRESSION_LIST, identifiers)
     
-    return ArrayExpression(NodeType.ARRAY_EXPR, expr_list)
+    return ArrayExpression(NodeType.ARRAY_EXPR, expr_list, ArrayPatternType.PATTERN)
+
+
+def convert_lambda(node: tree_sitter.Node) -> LambdaExpression:
+    """
+    将Python lambda表达式转换为内部表示的LambdaExpression
+    处理各种形式的lambda表达式，包括：
+    - 简单lambda: lambda x: x ** 2
+    - 条件表达式lambda: lambda x: "even" if x % 2 == 0 else "odd"
+    - 嵌套lambda: lambda x: lambda y: x + y
+    - 多参数lambda: lambda a, b: a + b
+    """
+    # 处理参数
+    params_node = node.child_by_field_name("parameters")
+    body_node = node.child_by_field_name("body")
+    
+    # 处理参数列表
+    params = []
+    if params_node:
+        for child in params_node.children:
+            if child.type == ",":
+                continue
+            if child.type == "identifier":
+                param = convert_identifier(child)
+                param_decl = node_factory.create_variable_declarator(param)
+                params.append(node_factory.create_untyped_param(param_decl))
+    
+    # 创建参数列表
+    param_list = node_factory.create_formal_parameter_list(params)
+    
+    # 处理lambda函数体
+    body = None
+    if body_node:
+        # 处理不同类型的lambda函数体
+        if body_node.type == "lambda":
+            # 嵌套lambda
+            body = convert_lambda(body_node)
+        elif body_node.type == "conditional_expression":
+            # 条件表达式
+            body = convert_conditional_expression(body_node)
+        else:
+            # 普通表达式
+            body = convert_expression(body_node)
+    
+    # 创建并返回LambdaExpression
+    return node_factory.create_lambda_expr(param_list, body, False)
+
+def convert_as_pattern(node: tree_sitter.Node) -> Expression:
+    """
+    将Python的as模式转换为内部表示
+    
+    处理形如 "expression as identifier" 的模式，常见于with语句和except子句中
+    """
+    value_node = None
+    alias_node = None
+    
+    # 遍历子节点查找value和alias
+    for i, child in enumerate(node.children):
+        if i == 0:  # 第一个子节点通常是value
+            value_node = child
+        elif child.type == "as":
+            continue  # 跳过as关键字
+        elif i > 1 and alias_node is None:  # as关键字后的节点是alias
+            alias_node = child
+    
+    # 转换value和alias
+    value = convert_expression(value_node) if value_node else None
+    alias = convert_expression(alias_node) if alias_node else None
+    
+    # 如果value和alias都存在，创建FieldAccess表示as关系
+    if value and alias:
+        return FieldAccess(
+            NodeType.FIELD_ACCESS,
+            value,
+            alias,
+            FieldAccessOps.AS,
+            False,
+            True  # is_as_pattern=True
+        )
+    
+    # 如果缺少value或alias，返回可用的部分
+    return value if value else (alias if alias else None)
+
+def convert_as_pattern_target(node: tree_sitter.Node) -> Expression:
+    """
+    将Python的as_pattern_target转换为内部表示
+    
+    as_pattern_target通常是as关键字后面的标识符
+    """
+    # 通常as_pattern_target只有一个子节点，即标识符
+    if node.child_count > 0:
+        return convert_expression(node.child(0))
+    
+    # 如果没有子节点，尝试直接转换节点本身
+    if node.type == "identifier":
+        return Identifier(NodeType.IDENTIFIER, node.text.decode('utf-8'))
+    
+    # 无法处理的情况
+    return None
+
+'''
+def convert_concatenated_string(node: tree_sitter.Node) -> Expression:
+    """
+    将Python的concatenated_string节点转换为内部表示
+    
+    处理形如 'string1' 'string2' 的字符串拼接
+    """
+    # 创建一个空的字符串字面量作为初始值
+    result = None
+    
+    # 遍历所有子节点（字符串部分）
+    for child in node.children:
+        # 转换每个字符串部分
+        if child.type == "string":
+            string_expr = convert_expression(child)
+            
+            if result is None:
+                # 第一个字符串部分
+                result = string_expr
+            else:
+                # 使用二元表达式表示字符串拼接
+                result = BinaryExpression(
+                    NodeType.BINARY_EXPR,
+                    result,
+                    string_expr,
+                    BinaryOps.PLUS  # 使用加号操作符表示字符串拼接
+                )
+    
+    # 如果没有找到任何字符串部分，返回一个空字符串字面量
+    if result is None:
+        result = Literal(NodeType.LITERAL, "")
+    
+    return result
+'''
+
+def convert_concatenated_string(node: tree_sitter.Node) -> Expression:
+    """
+    将Python的concatenated_string节点转换为内部表示
+    
+    处理形如 'string1' 'string2' 的字符串拼接
+    """
+    # 收集所有字符串部分
+    string_parts = []
+    
+    # 遍历所有子节点（字符串部分）
+    for child in node.children:
+        # 转换每个字符串部分
+        if child.type == "string":
+            string_expr = convert_expression(child)
+            if string_expr:
+                string_parts.append(string_expr)
+    
+    # 如果没有找到任何字符串部分，返回一个空字符串字面量
+    if not string_parts:
+        return Literal(NodeType.LITERAL, "")
+    
+    # 创建一个特殊的数组表达式来表示连接的字符串
+    # 使用is_concatenated_string标记这是一个字符串连接
+    expr_list = ExpressionList(NodeType.EXPRESSION_LIST, string_parts)
+    array_expr = ArrayExpression(NodeType.ARRAY_EXPR, expr_list, ArrayPatternType.CONCATENATED_STRING)
+    
+    # 设置一个特殊属性，表示这是一个连接的字符串
+    array_expr.is_concatenated_string = True
+    
+    return array_expr

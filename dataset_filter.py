@@ -177,77 +177,117 @@ def _get_python_function_root(root: tree_sitter.Node) -> tree_sitter.Node:
     raise RuntimeError("No function definition found in Python module")
 
 
-def compare_tokens(old_tokens: List[str], new_tokens: List[str]):
-    # 如果长度不同，尝试进行逗号对齐
-    if len(old_tokens) != len(new_tokens):
-        # 创建临时副本用于对齐
-        old_aligned = old_tokens.copy()
-        new_aligned = new_tokens.copy()
-        
-        # 尝试对齐：识别参数列表、数组或字典中的逗号
-        i, j = 0, 0
-        while i < len(old_aligned) and j < len(new_aligned):
-            if old_aligned[i] == new_aligned[j]:
-                i += 1
-                j += 1
-            elif old_aligned[i] == ',' and (j+1 < len(new_aligned) and old_aligned[i+1] == new_aligned[j]):
-                # 旧列表有额外的逗号，跳过
-                i += 1
-            elif new_aligned[j] == ',' and (i+1 < len(old_aligned) and old_aligned[i] == new_aligned[j+1]):
-                # 新列表有额外的逗号，跳过
-                j += 1
-            else:
-                # 无法对齐，返回原始比较结果
-                return False
-        
-        # 检查是否还有剩余的 token
-        if i < len(old_aligned) or j < len(new_aligned):
-            # 检查剩余的是否都是逗号
-            remaining_old = all(token == ',' for token in old_aligned[i:])
-            remaining_new = all(token == ',' for token in new_aligned[j:])
-            
-            if not (remaining_old and remaining_new):
-                return False
-        
-        # 对齐成功，继续使用对齐后的 token 进行比较
-        return True
+def compare_tokens(old_tokens: List[str], new_tokens: List[str]) -> bool:
+    """比较两个token列表是否语义等价
     
-    # 长度相同时的标准比较
-    for i, (old_token, new_token) in enumerate(zip(old_tokens, new_tokens)):
-        if old_token != new_token:
-            # 检查是否为字符串字面量
-            if ((old_token.startswith('"') and old_token.endswith('"') and
-                 new_token.startswith("'") and new_token.endswith("'")) or
-                (old_token.startswith("'") and old_token.endswith("'") and
-                 new_token.startswith('"') and new_token.endswith('"'))):
-                # 比较去掉引号后的内容
-                old_content = old_token[1:-1]
-                new_content = new_token[1:-1]
-                # 处理转义字符
-                if old_content.replace('\\"', '"').replace("\\'", "'") != \
-                   new_content.replace('\\"', '"').replace("\\'", "'"):
-                    return False
-            # 忽略赋值操作符周围的空格差异
-            elif '=' in old_token and '=' in new_token:
-                if old_token.replace(' = ', '=').replace(' =', '=').replace('= ', '=') != \
-                   new_token.replace(' = ', '=').replace(' =', '=').replace('= ', '='):
-                    return False
-            # 上下文相关的逗号处理
-            elif (old_token == ',' or new_token == ','):
+    参数:
+        old_tokens: 原始token列表
+        new_tokens: 新生成的token列表
+        
+    返回:
+        bool: 如果token列表语义等价则返回True，否则返回False
+    """
+    def preprocess_tokens(tokens: List[str]) -> List[str]:
+        """预处理token列表"""
+        processed = []
+        i = 0
+        while i < len(tokens):
+            # 处理续行符
+            if tokens[i] == '\\\n' and i + 1 < len(tokens):
+                i += 2  # 跳过续行符和后面的换行符
+                continue
+            
+            # 处理链式调用中的换行
+            if (i + 2 < len(tokens) and 
+                tokens[i] == ')' and 
+                tokens[i+1].strip() == '' and  # 换行
+                tokens[i+2] == '.'):  # 下一行以点号开始
+                processed.append(tokens[i])  # 保留右括号
+                i += 2  # 跳过换行，保留下一个点号
+                continue
+            
+            # 处理字符串引号差异
+            if tokens[i].startswith(('"', "'")):
+                # 统一转换为单引号比较内容
+                content = tokens[i][1:-1]
+                processed.append(f"'{content}'")
+            else:
+                # 处理赋值操作符周围的空格
+                if '=' in tokens[i]:
+                    processed.append(tokens[i].replace(' ', ''))
+                else:
+                    processed.append(tokens[i])
+            i += 1
+        return processed
+    
+    # 预处理token列表
+    old_processed = preprocess_tokens(old_tokens)
+    new_processed = preprocess_tokens(new_tokens)
+    
+    # 比较处理后的token列表
+    if len(old_processed) != len(new_processed):
+        diff = abs(len(old_processed) - len(new_processed))
+        if diff <= 3:
+            logger = logging.getLogger("dataset_filter_python")
+            logger.debug("新旧Tokens差异:")
+            logger.debug(f"原始Tokens: {old_processed}")
+            logger.debug(f"复原Tokens: {new_processed}")
+        
+        # 尝试对齐逗号
+        i, j = 0, 0
+        while i < len(old_processed) and j < len(new_processed):
+            if old_processed[i] == new_processed[j]:
+                i += 1
+                j += 1
+            elif old_processed[i] == ',':
                 # 检查是否在参数列表、数组或字典的末尾
-                # 这里我们简单地检查下一个 token 是否是右括号、右方括号或右大括号
-                next_idx = i + 1
-                if next_idx < len(old_tokens) and next_idx < len(new_tokens):
-                    closing_tokens = [')', ']', '}']
-                    if (old_tokens[next_idx] in closing_tokens or new_tokens[next_idx] in closing_tokens):
-                        # 在闭合符号前的逗号差异是可接受的
-                        continue
-                # 其他情况下的逗号差异被视为错误
-                return False
+                if i + 1 < len(old_processed) and old_processed[i+1] in [')', ']', '}']:
+                    i += 1  # 跳过多余的逗号
+                else:
+                    return False
+            elif new_processed[j] == ',': 
+                # 检查是否在参数列表、数组或字典的末尾
+                if j + 1 < len(new_processed) and new_processed[j+1] in [')', ']', '}']:
+                    j += 1  # 跳过多余的逗号
+                else:
+                    return False
             else:
                 return False
+        
+        # 检查剩余token是否都是逗号
+        remaining_old = all(t == ',' for t in old_processed[i:])
+        remaining_new = all(t == ',' for t in new_processed[j:])
+        return remaining_old and remaining_new
+    
+    # 长度相同则逐个比较
+    mismatch_count = 0
+    mismatch_indices = []
+    for idx, (old, new) in enumerate(zip(old_processed, new_processed)):
+        if old != new:
+            mismatch_count += 1
+            mismatch_indices.append(idx)
+            # 忽略字符串引号差异
+            if ((old.startswith('"') and old.endswith('"') and 
+                 new.startswith("'") and new.endswith("'")) or
+                (old.startswith("'") and old.endswith("'") and 
+                 new.startswith('"') and new.endswith('"'))):
+                mismatch_count -= 1  # 不计入实际差异
+                continue
+            return False
+    
+    if abs(mismatch_count) <= 3 and abs(mismatch_count) > 0:
+        logger = logging.getLogger("dataset_filter_python")
+        logger.debug("新旧Tokens差异:")
+        for idx in mismatch_indices:
+            # 只打印差异的token及其上下文
+            start = max(0, idx - 2)
+            end = min(len(old_processed), idx + 3)
+            logger.debug(f"位置 {idx}:")
+            logger.debug(f"原始: {' '.join(old_processed[start:end])}")
+            logger.debug(f"复原:   {' '.join(new_processed[start:end])}")
+            logger.debug("-" * 50)
+    
     return True
-
 
 def function_round_trip(parser: tree_sitter.Parser, code: str, lang: str, logger: logging.Logger) -> Tuple[bool, str]:
     if lang == "java":
@@ -359,6 +399,7 @@ def function_round_trip(parser: tree_sitter.Parser, code: str, lang: str, logger
         if new_root.has_error:
             logger.error(f"生成的代码解析错误: {new_root}")
             logger.error(f"生成的代码:\n{new_code}")
+            logger.error(f"原始代码:\n{code}")
             return (False, "new code has error")
 
         old_tokens = collect_tokens(tree.root_node)

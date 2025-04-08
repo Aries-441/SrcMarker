@@ -31,7 +31,7 @@ class CatchClause(Node):
             throw_invalid_type(self.body.node_type, self, attr="body")
         if (
             self.catch_types is not None
-            and self.catch_types.node_type != NodeType.TYPE_IDENTIFIER_LIST
+            and self.catch_types.node_type not in [NodeType.TYPE_IDENTIFIER_LIST, NodeType.IDENTIFIER]
         ):
             throw_invalid_type(self.catch_types.node_type, self, attr="catch_types")
         if (
@@ -108,6 +108,7 @@ class TryStatement(Statement):
         if (
             self.finalizer is not None
             and self.finalizer.node_type != NodeType.FINALLY_CLAUSE
+            and self.finalizer.node_type != NodeType.BLOCK_STMT
         ):
             throw_invalid_type(self.finalizer.node_type, self, attr="finalizer")
         if (

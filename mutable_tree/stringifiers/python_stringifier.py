@@ -8,7 +8,7 @@ from mutable_tree.nodes.expressions.binary_expr import BinaryExpression
 from mutable_tree.nodes.expressions.unary_expr import UnaryExpression
 from mutable_tree.nodes.expressions.call_expr import CallExpression
 from mutable_tree.nodes.expressions.field_access import FieldAccess
-from mutable_tree.nodes.expressions.array_expr import ArrayExpression
+from mutable_tree.nodes.expressions.array_expr import ArrayExpression, ArrayPatternType
 from mutable_tree.nodes.expressions.array_access import ArrayAccess
 from mutable_tree.nodes.statements.if_stmt import IfStatement
 from mutable_tree.nodes.statements.for_in_stmt import ForInStatement, ForInType
@@ -172,17 +172,41 @@ class PythonStringifier(BaseStringifier):
             return "NoneExpr"
         
         return "\n".join(exprs)
-    
+        
     def stringify_BinaryExpression(self, node: BinaryExpression) -> str:
+        """处理二元表达式，包括字符串拼接"""
+        # 特殊处理字符串拼接
+        if node.op.value == "+" and self._is_string_literal(node.left) and self._is_string_literal(node.right):
+            # 获取左右两边的字符串值
+            left_str = self.stringify(node.left)
+            right_str = self.stringify(node.right)
+            
+            # 如果两边都是字符串字面量，直接拼接它们（去掉右侧字符串的引号）
+            if (left_str.startswith("'") and left_str.endswith("'") and 
+                right_str.startswith("'") and right_str.endswith("'")):
+                # 去掉右侧字符串的引号，直接拼接
+                return f"{left_str} {right_str}"
+        
+        # 处理其他二元表达式
         if node.op.value == "&&":
             op = "and"
         elif node.op.value == "||":
             op = "or"
         else:
             op = node.op.value
-        return (
-            f"{self.stringify(node.left)} {op} {self.stringify(node.right)}"
-        )
+        
+        return f"{self.stringify(node.left)} {op} {self.stringify(node.right)}"
+
+    def _is_string_literal(self, node) -> bool:
+        """判断节点是否为字符串字面量"""
+        if node.node_type == NodeType.LITERAL:
+            value = node.value if hasattr(node, 'value') else None
+            # 检查是否是字符串值
+            if isinstance(value, str):
+                # 检查是否被引号包围
+                return (value.startswith("'") and value.endswith("'")) or \
+                    (value.startswith('"') and value.endswith('"'))
+        return False
     
     def stringify_ExpressionStatement(self, node: ExpressionStatement) -> str:
         """处理表达式语句"""
@@ -255,9 +279,9 @@ class PythonStringifier(BaseStringifier):
         return f"{obj_str}.{field_str}"
     
     def stringify_ArrayExpression(self, node: ArrayExpression) -> str:
-        """将ArrayExpression对象转换为字符串"""
+        """处理数组表达式，包括列表、元组、集合、字典和连接字符串"""
         if not hasattr(node, 'elements') or not node.elements:
-            return "[]"
+            return "[]"  # 默认返回空列表
         
         elements_str = []
         for element in node.elements.get_children():
@@ -265,8 +289,42 @@ class PythonStringifier(BaseStringifier):
             if element_str:
                 elements_str.append(element_str)
         
-        return f"[{', '.join(elements_str)}]"
-
+        # 根据 is_pattern 的值选择不同的格式化方式
+        if node.is_pattern == ArrayPatternType.LIST:
+            return f"[{', '.join(elements_str)}]"
+        elif node.is_pattern == ArrayPatternType.TUPLE:
+            # 处理空元组和单元素元组的特殊情况
+            if not elements_str:
+                return "()"
+            elif len(elements_str) == 1:
+                return f"({elements_str[0]},)"
+            else:
+                return f"({', '.join(elements_str)})"
+        elif node.is_pattern == ArrayPatternType.SET:
+            if not elements_str:
+                return "set()"  # 空集合需要使用 set() 函数
+            return f"{{{', '.join(elements_str)}}}"
+        elif node.is_pattern == ArrayPatternType.DICT:
+            return f"{{{', '.join(elements_str)}}}"
+        elif node.is_pattern == ArrayPatternType.PATTERN:
+            # 用于模式匹配的表达式
+            return f"{', '.join(elements_str)}"
+        elif node.is_pattern == ArrayPatternType.CONCATENATED_STRING:
+            # 处理连接字符串
+            return ' '.join(elements_str)
+        elif node.is_pattern == ArrayPatternType.SLICE:
+            # 处理切片表达式
+            return ':'.join(elements_str)
+        elif node.is_pattern == ArrayPatternType.COMPREHENSION:
+            # 处理推导式
+            if hasattr(node, 'comprehension_expr') and node.comprehension_expr:
+                comp_expr = self.stringify(node.comprehension_expr)
+                return f"[{elements_str[0]} {comp_expr}]"
+            return f"[{', '.join(elements_str)}]"
+        else:
+            # 默认作为列表处理
+            return f"[{', '.join(elements_str)}]"
+    
     def stringify_ArrayAccess(self, node: ArrayAccess) -> str:
         """
         将ArrayAccess对象转换为字符串，支持Python的各种切片操作
@@ -395,30 +453,54 @@ class PythonStringifier(BaseStringifier):
     
     
     def stringify_Literal(self, node: Literal) -> str:
-        """处理字面量"""
-        value = node.value
+        """处理字面量，包括字符串、数字、布尔值等"""
+        if not hasattr(node, 'value'):
+            return "None"
         
-        # 检查是否是数字字面量
-        if isinstance(value, str):
-            # 尝试判断是否是数字
-            if value.startswith('-') and value[1:].isdigit():
-                # 负整数，确保不添加引号
-                return value
-            elif value.isdigit() or (value.replace('.', '', 1).isdigit() and value.count('.') <= 1):
-                # 正整数或浮点数，确保不添加引号
-                return value
-            elif value in ('True', 'False', 'None'):
-                # 布尔值和None，不需要引号
-                return value
-            elif value == "true":
-                # 特殊处理：将"true"转换为True
-                return "True"
-            else:
-                # 字符串，添加单引号
-                return f"'{value}'"
+        # 检查是否有明确的字符串标记
+        is_string = hasattr(node, 'is_string') and node.is_string
         
-        # 其他类型的字面量
-        return str(value)
+        # 如果有原始文本，优先使用
+        if hasattr(node, 'raw_text') and node.raw_text:
+            return node.raw_text
+        
+        # 处理字符串字面量
+        if is_string:
+            # 检查引号类型
+            quote_type = getattr(node, 'quote_type', 'single')
+            
+            if quote_type == "double":
+                return f'"{node.value}"'
+            elif quote_type == "triple_single":
+                return f"'''{node.value}'''"
+            elif quote_type == "triple_double":
+                return f'"""{node.value}"""'
+            else:  # 默认使用单引号
+                return f"'{node.value}'"
+        
+        # 处理特殊字面量
+        if node.value == "True" or node.value == "False" or node.value == "None":
+            return node.value
+        
+        # 检查是否是数字
+        try:
+            # 尝试将值解析为整数
+            int(node.value)
+            return node.value
+        except ValueError:
+            try:
+                # 尝试将值解析为浮点数
+                float(node.value)
+                return node.value
+            except ValueError:
+                # 不是数字，当作字符串处理
+                # 检查值是否已经带有引号
+                if (node.value.startswith("'") and node.value.endswith("'")) or \
+                (node.value.startswith('"') and node.value.endswith('"')):
+                    return node.value
+                else:
+                    # 默认添加单引号
+                    return f"'{node.value}'"
 
     
     def stringify_ForInStatement(self, node: ForInStatement) -> str:
@@ -510,13 +592,11 @@ class PythonStringifier(BaseStringifier):
         
         # 处理except块
         if hasattr(node, 'handlers') and node.handlers:
-            for handler in node.handlers.catch_clauses:
+            for handler in node.handlers.node_list:
                 # 获取异常类型
                 exception_type = ""
-                if hasattr(handler, 'exception_types') and handler.exception_types:
-                    exception_type = self.stringify(handler.exception_types)
-                elif hasattr(handler, 'exception_type') and handler.exception_type:
-                    exception_type = self.stringify(handler.exception_type)
+                if hasattr(handler, 'catch_types') and handler.catch_types:
+                    exception_type = self.stringify(handler.catch_types)
                 
                 # 获取异常变量
                 exception_var = ""
@@ -530,7 +610,7 @@ class PythonStringifier(BaseStringifier):
                 if exception_type:
                     result += f"\nexcept {exception_type}{exception_var}:\n{self._indent(handler_body)}"
                 else:
-                    result += f"\nexcept:{exception_var}\n{self._indent(handler_body)}"
+                    result += f"\nexcept{exception_var}:\n{self._indent(handler_body)}"
         
         # 处理else块
         if hasattr(node, 'else_block') and node.else_block:
@@ -538,7 +618,10 @@ class PythonStringifier(BaseStringifier):
             result += f"\nelse:\n{self._indent(else_body)}"
         
         # 处理finally块
-        if hasattr(node, 'handlers') and node.handlers and hasattr(node.handlers, 'finally_block') and node.handlers.finally_block:
+        if hasattr(node, 'finalizer') and node.finalizer:
+            finally_body = self.stringify(node.finalizer.body)
+            result += f"\nfinally:\n{self._indent(finally_body)}"
+        elif hasattr(node, 'handlers') and node.handlers and hasattr(node.handlers, 'finally_block') and node.handlers.finally_block:
             finally_body = self.stringify(node.handlers.finally_block)
             result += f"\nfinally:\n{self._indent(finally_body)}"
         
@@ -558,32 +641,89 @@ class PythonStringifier(BaseStringifier):
         return f"assert {condition}"
     
     def stringify_RaiseStatement(self, node) -> str:
-        """处理raise语句"""
-        if not hasattr(node, 'expression'):
+        """
+        处理raise语句
+        
+        支持以下形式:
+        1. raise - 不带参数的重新抛出异常
+        2. raise Exception - 抛出指定异常
+        3. raise Exception("message") - 带消息的异常
+        4. raise Exception from cause - 带原因的异常
+        """
+        # 处理不带参数的raise语句
+        if not hasattr(node, 'expression') or node.expression is None:
             return "raise"
         
         expression = self.stringify(node.expression)
         
-        if hasattr(node, 'cause') and node.cause:
+        # 处理带from子句的raise语句
+        if hasattr(node, 'cause') and node.cause is not None:
             cause = self.stringify(node.cause)
             return f"raise {expression} from {cause}"
         
+        # 处理普通的带异常的raise语句
         return f"raise {expression}"
     
-    def stringify_WithStatement(self, node) -> str:
-        """处理with语句"""
+    def stringify_WithStatement(self, node: WithStatement) -> str:
+        """
+        将WithStatement对象转换为字符串
+        
+        支持以下形式:
+        1. 单个资源: with open('file.txt') as f:
+        2. 多个资源: with open('file1.txt') as f1, open('file2.txt') as f2:
+        3. 不带as的资源: with lock:
+        4. 带异步前缀: async with session.get(url) as response:
+        """
         if not hasattr(node, 'object') or not hasattr(node, 'body'):
             return ""
         
-        object_expr = self.stringify(node.object)
-        body = self.stringify(node.body)
+        # 处理with语句的资源部分
+        resources = []
         
-        # 处理as子句
-        as_clause = ""
-        if hasattr(node, 'alias') and node.alias:
-            as_clause = f" as {self.stringify(node.alias)}"
+        # 检查是否是多个资源（数组表达式）
+        if hasattr(node.object, 'node_type') and node.object.node_type == NodeType.ARRAY_EXPR and hasattr(node.object, 'elements'):
+            # 处理多个资源
+            for element in node.object.elements.get_children():
+                resource_str = self._process_with_resource(element)
+                if resource_str:
+                    resources.append(resource_str)
+        else:
+            # 单个资源
+            resource_str = self._process_with_resource(node.object)
+            if resource_str:
+                resources.append(resource_str)
         
-        return f"with {object_expr}{as_clause}:\n{self._indent(body)}"
+        # 检查是否是异步with语句
+        async_prefix = "async " if hasattr(node, 'is_async') and node.is_async else ""
+        
+        # 构建with语句的头部
+        with_header = f"{async_prefix}with " + ", ".join(resources)
+        
+        # 处理with语句的主体
+        body = self.stringify(node.body) if node.body else "pass"
+        
+        # 如果主体为空，添加pass语句
+        if not body or body.strip() == "":
+            body = "pass"
+        
+        # 返回完整的with语句
+        return f"{with_header}:\n{self._indent(body)}"
+
+    def _process_with_resource(self, resource) -> str:
+        """处理with语句中的资源表达式，支持as模式"""
+        if not resource:
+            return ""
+        
+        # 检查是否是带as的资源（使用FieldAccess表示）
+        if hasattr(resource, 'node_type') and resource.node_type == NodeType.FIELD_ACCESS:
+            # 检查是否是as模式
+            if hasattr(resource, 'is_as_pattern') and resource.is_as_pattern:
+                obj_str = self.stringify(resource.object)
+                field_str = self.stringify(resource.field)
+                return f"{obj_str} as {field_str}"
+        
+        # 普通资源表达式
+        return self.stringify(resource)
     
     def stringify_PassStatement(self, node) -> str:
         """处理pass语句"""
@@ -688,5 +828,28 @@ class PythonStringifier(BaseStringifier):
         op = node.op
         if op in {UnaryOps.TYPEOF, UnaryOps.DELETE}:
             return f"{op.value} {self.stringify(node.operand)}"
+        elif op == UnaryOps.NOT:
+            op.value = "not"
+            return f"{op.value} {self.stringify(node.operand)}"
         else:
-            return f"{op.value}{self.stringify(node.operand)}"
+            return f"{op.value} {self.stringify(node.operand)}"
+
+    def stringify_LambdaExpression(self, node) -> str:
+        """处理Lambda表达式"""
+        if not hasattr(node, 'params') or not hasattr(node, 'body'):
+            return "lambda: None"
+        
+        # 处理参数
+        params = []
+        if node.params and hasattr(node.params, 'get_children'):
+            for param in node.params.get_children():
+                param_str = self.stringify(param)
+                if param_str:
+                    params.append(param_str)
+        
+        params_str = ", ".join(params)
+        
+        # 处理函数体
+        body_str = self.stringify(node.body) if node.body else "None"
+        
+        return f"lambda {params_str}: {body_str}"

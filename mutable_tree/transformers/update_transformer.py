@@ -20,6 +20,11 @@ class UpdateTransformer(CodeTransformer):
         self.lang = lang
 
     def get_available_transforms(self):
+        if self.lang == "python":
+            return [
+                self.TRANSFORM_BINOP_UPDATE,
+                self.TRANSFORM_ASSIGN_UPDATE,
+            ]
         return [
             self.TRANSFORM_PREFIX_UPDATE,
             self.TRANSFORM_POSTFIX_UPDATE,

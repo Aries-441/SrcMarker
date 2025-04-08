@@ -5,7 +5,7 @@ Autor: Liujunjie/Aries-441
 Github: https://github.com/Aries-441
 Date: 2025-03-19 19:00:14
 E-mail: sjtu.liu.jj@gmail.com/sjtu.1518228705@sjtu.edu.cn
-LastEditTime: 2025-04-04 19:01:02
+LastEditTime: 2025-04-04 19:15:03
 '''
 import torch
 import random
@@ -120,10 +120,10 @@ def main():
         ast_transformers.LoopTransformer(LANG), #NOTE:目前看来需要大改，因为Python for循环的语法和C++不一样
         ast_transformers.InfiniteLoopTransformer(LANG), #已修改
         ast_transformers.UpdateTransformer(LANG), #已修改，但是舍弃了2 Option
-        ast_transformers.SameTypeDeclarationTransformer(LANG), #目前看来不需要修改
-        ast_transformers.VarDeclLocationTransformer(LANG), #NOTE:目前看来需要大改，因为Python没有var声明的语法
-        ast_transformers.VarInitTransformer(LANG),
-        ast_transformers.VarNameStyleTransformer(LANG), #虽然不符合PEP 8命名规范，但是不影响运行结果
+        ast_transformers.SameTypeDeclarationTransformer(LANG), #NOTE:目前看来需要大改，因为Python没有变量声明语法
+        ast_transformers.VarDeclLocationTransformer(LANG), #NOTE:目前看来需要大改，因为Python没有变量声明语法
+        ast_transformers.VarInitTransformer(LANG), #NOTE:目前看来需要大改，因为Python没有变量声明语法
+        ast_transformers.VarNameStyleTransformer(LANG), #虽然不符合PEP 8命名规范，但是不影响运行结果，可以暂时保留
     ]
     transform_computer = CodeTransformProvider(LANG, parser, code_transformers)
     transform_manager = InMemoryJitRuntimeDataManager(

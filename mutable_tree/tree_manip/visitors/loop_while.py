@@ -124,3 +124,100 @@ class ForToWhileVisitor(TransformingVisitor):
             node_factory.create_statement_list(new_stmts)
         )
         return (True, [new_block])
+    
+    def visit_ForInStatement(
+        self,
+        node: ForInStatement,
+        parent: Optional[Node] = None,
+        parent_attr: Optional[str] = None,
+    ):
+        """处理Python的for-in语句转换为while循环"""
+        if self.lang != "python":
+            # 非Python语言不处理ForInStatement
+            return False, []
+            
+        self.generic_visit(node, parent, parent_attr)
+        new_stmts = []
+        
+        # 获取迭代变量和可迭代对象
+        iterator_var = node.declarator
+        iterable = node.right
+        body = node.body
+        
+        # 创建迭代器变量
+        iter_name = f"_iter_{iterator_var.name if hasattr(iterator_var, 'name') else 'var'}"
+        iter_id = node_factory.create_identifier(iter_name)
+        
+        # 创建iter()调用
+        iter_func = node_factory.create_identifier("iter")
+        iter_args = node_factory.create_expression_list([iterable])
+        iter_call = node_factory.create_call_expr(iter_func, iter_args)
+        
+        # 创建迭代器初始化语句: _iter_var = iter(iterable)
+        iter_init = node_factory.create_expression_stmt(
+            node_factory.create_assignment_expr(
+                iter_id, 
+                iter_call, 
+                get_assignment_op("=")
+            )
+        )
+        new_stmts.append(iter_init)
+        
+        # 创建next()调用和try-except结构
+        next_func = node_factory.create_identifier("next")
+        next_args = node_factory.create_expression_list([iter_id])
+        next_call = node_factory.create_call_expr(next_func, next_args)
+        
+        # 创建赋值语句: iterator_var = next(_iter_var)
+        next_assign = node_factory.create_expression_stmt(
+            node_factory.create_assignment_expr(
+                iterator_var, 
+                next_call, 
+                get_assignment_op("=")
+            )
+        )
+        
+        # 创建StopIteration异常捕获
+        stop_iter_id = node_factory.create_identifier("StopIteration")
+        break_stmt = node_factory.create_break_stmt()
+        
+        # 创建try-except结构
+        try_body = node_factory.create_block_stmt(
+            node_factory.create_statement_list([next_assign])
+        )
+        catch_body = node_factory.create_block_stmt(
+            node_factory.create_statement_list([break_stmt])
+        )
+        catch_clause = node_factory.create_catch_clause(
+            catch_body, 
+            stop_iter_id, 
+            None, 
+            None
+        )
+        try_handlers = node_factory.create_try_handlers([catch_clause], None)
+        try_stmt = node_factory.create_try_stmt(try_body, try_handlers, None)
+        
+        # 创建while True循环
+        true_literal = node_factory.create_literal("True")
+        while_body_stmts = [try_stmt]
+        
+        # 添加原始循环体
+        if body.node_type == NodeType.BLOCK_STMT:
+            body_stmts = body.get_children()[0].get_children()
+            while_body_stmts.extend(body_stmts)
+        else:
+            while_body_stmts.append(body)
+        
+        while_body = node_factory.create_block_stmt(
+            node_factory.create_statement_list(while_body_stmts)
+        )
+        
+        while_stmt = node_factory.create_while_stmt(true_literal, while_body)
+        new_stmts.append(while_stmt)
+        
+        # 创建包含所有语句的块
+        new_block = node_factory.create_block_stmt(
+            node_factory.create_statement_list(new_stmts)
+        )
+        
+        return (True, [new_block])

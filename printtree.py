@@ -114,8 +114,70 @@ if __name__ == '__main__':
             print("Not a list with at least two elements")
 
 '''
+
+
+    code1 = '''
+    # 使用 for 循环
+text = "hello"
+for char in text:
+    print(char)
+'''
+
+    code2 = '''
+# 1. 不带参数的重新抛出异常
+raise
+
+# 2. 抛出指定异常
+raise ValueError
+
+# 3. 带消息的异常
+raise Exception("An error occurred")
+
+# 4. 带原因的异常
+raise RuntimeError("Failed to process data") from ValueError("Invalid input")
+            '''
+            
+    code3 = '''
+# 1. 简单的平方计算
+square = lambda x: x ** 2
+
+# 2. 条件表达式
+is_even = lambda x: "even" if x % 2 == 0 else "odd"
+
+# 3. 嵌套 lambda
+nested_lambda = lambda x: lambda y: x + y
+
+# 4. 使用 lambda 进行映射操作
+square_list = list(map(lambda x: x ** 2, [1, 2, 3, 4, 5]))
+
+# 5. 使用 lambda 进行排序
+sorted_list = sorted([3, 1, 4, 1, 5, 9, 2, 6], key=lambda x: -x)
+
+# 6. 使用 lambda 捕获异常（间接方式）
+safe_divide = lambda a, b: (lambda: a / b)() if b != 0 else "Division by zero"
+            '''
+            
+    code4 = '''
+    op: NodeOp = lisp_ast.op
+    '''
+    
+    code5 = '''
+            try:
+                val = int(val)
+            except ValueError:
+            '''
+    
+    code6 = '''
+                tables_list_resp = self.service.tables().list(projectId=project_id)
+                tables_list_resp = self.service.tables().\
+                list(projectId=project_id)
+
+    '''
+    
+    code7= '''
+
+    '''
     
     # 测试语法树
-    tree = parser.parse(bytes(code, 'utf8'))
+    tree = parser.parse(bytes(code7, 'utf8'))
     print_tree(tree.root_node)  
-    

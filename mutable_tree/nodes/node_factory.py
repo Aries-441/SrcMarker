@@ -208,8 +208,8 @@ def create_array_access(
     return ArrayAccess(NodeType.ARRAY_ACCESS, array, index, optional)
 
 
-def create_array_expr(elements: ExpressionList) -> ArrayExpression:
-    return ArrayExpression(NodeType.ARRAY_EXPR, elements)
+def create_array_expr(elements: ExpressionList, is_pattern: int = 0 ) -> ArrayExpression:
+    return ArrayExpression(NodeType.ARRAY_EXPR, elements, is_pattern)
 
 
 def create_call_expr(

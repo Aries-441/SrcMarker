@@ -67,6 +67,7 @@ class NodeType(Enum):
     GOTO_STMT = "GotoStatement"
     WITH_STMT = "WithStatement"
     PASS_STMT = "PassStatement"
+    RAISE_STMT = "RaiseStatement"
 
     # declarations & definitions (are also statements)
     FUNCTION_DECLARATOR = "FunctionDeclarator"
